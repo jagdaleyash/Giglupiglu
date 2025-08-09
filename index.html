@@ -1,0 +1,680 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Girisha — Procedural Medieval Love Adventure</title>
+<style>
+:root{
+  --green:#157a3b; --bg:#f6fbf7; --card:#fff; --muted:#4f5b52;
+  --accent:#1f8a46;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:Inter, "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial;background:linear-gradient(180deg,var(--bg),#ffffff);color:#07290f}
+.container{max-width:1100px;margin:28px auto;padding:18px}
+.header{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.title{display:flex;align-items:center;gap:12px}
+.portrait{width:64px;height:64px;border-radius:999px;background:linear-gradient(135deg,var(--green),#22c55e);box-shadow:0 10px 30px rgba(16,185,129,0.12)}
+.title h1{margin:0;font-size:20px}
+.controls{display:flex;gap:8px}
+.controls button{padding:8px 10px;border-radius:10px;border:1px solid rgba(0,0,0,0.06);background:var(--card);cursor:pointer}
+.main{display:flex;gap:16px;margin-top:18px}
+.left{flex:1}
+.right{width:340px}
+.card{background:var(--card);border-radius:12px;padding:12px;margin-bottom:12px;box-shadow:0 8px 22px rgba(6,40,18,0.04)}
+.hud{display:flex;flex-direction:column;gap:8px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.stat{background:linear-gradient(180deg,#fcfff9,#ffffff);padding:8px;border-radius:8px;border:1px solid rgba(16,185,129,0.05);text-align:center}
+.log{height:340px;overflow:auto;padding:12px;font-size:15px;line-height:1.45}
+.choices{display:flex;flex-direction:column;gap:8px}
+.choice{padding:12px;border-radius:10px;border:1px solid rgba(0,0,0,0.05);background:linear-gradient(180deg,#fff,#f7fff8);cursor:pointer;text-align:left}
+.choice small{display:block;color:var(--muted);font-size:12px}
+.npc{display:flex;justify-content:space-between;padding:8px;border-radius:8px;margin-bottom:8px;background:linear-gradient(180deg,#fff,#f9fff9)}
+.inv .item{padding:8px;border-radius:8px;margin-bottom:6px;background:#f6fff8}
+.footer{margin-top:10px;text-align:center;color:var(--muted);font-size:13px}
+.muted{color:var(--muted)}
+hr{border:none;border-top:1px dashed rgba(0,0,0,0.06);margin:12px 0}
+.fade-in{animation:fadeIn 420ms ease-out}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.modal{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(6,20,10,0.35);z-index:60}
+.modal .box{background:#fff;padding:18px;border-radius:12px;max-width:720px;width:92%;box-shadow:0 20px 60px rgba(6,40,18,0.25)}
+.input{padding:8px;border-radius:8px;border:1px solid rgba(0,0,0,0.08);width:100%}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+@media(max-width:920px){.main{flex-direction:column}.right{width:100%}}
+</style>
+</head>
+<body>
+<div class="container">
+  <header class="header">
+    <div class="title">
+      <div class="portrait" id="portrait"></div>
+      <div>
+        <h1>Girisha — The Novel that was lost in time.</h1>
+        <div class="small muted">My baby's personal visual novel from Yash.</div>
+      </div>
+    </div>
+    <div class="controls">
+      <button id="btnStart">▶ Start / New Game</button>
+      <button id="btnMusic">🔈 Music Off</button>
+      <button id="btnSave">💾 Save</button>
+      <button id="btnExport">⬇ Export</button>
+      <button id="btnImport">⬆ Import</button>
+    </div>
+  </header>
+
+  <main class="main">
+    <section class="left">
+      <div class="card hud">
+        <div><strong id="pName">Girisha</strong> • <small id="pTitle" class="muted">Healer & Listener</small></div>
+        <div class="small">Location: <strong id="city">Mumbai</strong> • Seed: <span id="seed" class="muted small">-</span></div>
+        <div class="stats" id="stats"></div>
+        <div class="small">Money: ₹<span id="money">0</span> • Reputation: <span id="rep">0</span> • Love (Yash): <span id="love">0</span></div>
+      </div>
+
+      <div id="log" class="card log" aria-live="polite"></div>
+
+      <div id="choices" class="card choices"></div>
+    </section>
+
+    <aside class="right">
+      <div class="card">
+        <h3>Cast this run</h3>
+        <div id="npcList"></div>
+      </div>
+
+      <div class="card inv">
+        <h3>Inventory</h3>
+        <div id="inventory"></div>
+      </div>
+
+      <div class="card">
+        <h3>Achievements</h3>
+        <ul id="achievements"></ul>
+      </div>
+
+      <div class="card small muted">
+        <div><strong>Systems</strong></div>
+        <div>Psychology • Law • Merit • Democracy • Heart • Trust • Family</div>
+      </div>
+    </aside>
+  </main>
+
+  <footer class="footer">Made with love by Yash — every story is a gift to Girisha. 💚</footer>
+</div>
+
+<div id="modal" style="display:none"></div>
+<!-- Put ambient-medieval-real.mp3 in same folder to enable music -->
+<audio id="bg" loop preload="auto"><source src="ambient-medieval-real.mp3" type="audio/mpeg"></audio>
+
+<script>
+/* Procedural medieval love adventure — single file
+   - New Game regenerates character personalities, roles & backstories
+   - Yash always has special, deeply personal romantic scenes (several written)
+   - Save/load/export/import + music + seed for replayability
+*/
+
+(() => {
+  // DOM
+  const D = {
+    start: document.getElementById('btnStart'),
+    music: document.getElementById('btnMusic'),
+    save: document.getElementById('btnSave'),
+    exp: document.getElementById('btnExport'),
+    imp: document.getElementById('btnImport'),
+    log: document.getElementById('log'),
+    choices: document.getElementById('choices'),
+    stats: document.getElementById('stats'),
+    npcList: document.getElementById('npcList'),
+    inventory: document.getElementById('inventory'),
+    achievements: document.getElementById('achievements'),
+    city: document.getElementById('city'),
+    seed: document.getElementById('seed'),
+    pName: document.getElementById('pName'),
+    pTitle: document.getElementById('pTitle'),
+    money: document.getElementById('money'),
+    rep: document.getElementById('rep'),
+    love: document.getElementById('love'),
+    modal: document.getElementById('modal'),
+    bg: document.getElementById('bg')
+  };
+
+  // Characters list and city assignment
+  const DEFAULT_NPCS = [
+    {name:'Sneha', home:'Meerut'},
+    {name:'Simran', home:'Meerut'},
+    {name:'Manini', home:'Jaipur'},
+    {name:'Prachi', home:'Jaipur'},
+    {name:'Laiba', home:'Jaipur'},
+    {name:'Doy', home:'Mumbai'},
+    {name:'Drishti', home:'Mumbai'},
+    {name:'Shreya', home:'Mumbai'},
+    {name:'Sakshi', home:'Mumbai'},
+    {name:'Yash', home:'Variable'} // special: can travel
+  ];
+
+  const CITIES = ['Mumbai','Jaipur','Meerut'];
+
+  // trait pools and role pools
+  const TRAITS = ['Loyal','Romantic','Ruthless','Idealistic','Secretive','Ambitious','Generous','Cunning','Pragmatic','Naive','Curious','Stubborn'];
+  const ROLES = {
+    Mumbai: ['Healer','Tavern-keeper','Scribe','Ferry-master','Merchant','Guild-scribe'],
+    Jaipur: ['Scribe','Carpenter','Merchant','Artisan','Guild-clerk','Archivist'],
+    Meerut: ['Farmer','Apothecary','Weaver','Carter','Village-elder','Herbalist'],
+    Variable: ['Traveler','Trader','Poet','Soldier','Scholar']
+  };
+
+  // Yash romantic scenes bank (deep & personal) — will be chosen based on Yash's personality
+  const YASH_SCENES = {
+    Poet: [
+      `Yash takes your hand beneath the lanterns. He recites a few lines — not for applause but for you. "I carry your laugh like a familiar map," he whispers. The world contracts until it is only the two of you.`,
+      `Yash folds a small scrap of paper with a verse: "For you, I learn to be softer." He tucks it into your palm and presses his forehead to yours. In that silence, promises are made without a name.`
+    ],
+    Soldier: [
+      `Yash's hands are callused; they tremble when he brushes your hair aside. He admits fear about leaving and asks if you would rather stay or travel together. The honesty is a gift.`,
+      `In the dim light, Yash cleans his worn sword and speaks of duty. He says: "If I go, I carry you in my stead." It is both a goodbye and a vow.`
+    ],
+    Trader: [
+      `Yash shows you a token from a foreign market — a green bead he bought thinking of you. "It reminded me of your eyes," he laughs. The smallness of the gift is its truth.`,
+      `He negotiates a deal in the square and, after, takes you to hideaway stairs where he reveals a plan to open a shop that will have your name on the sign.`
+    ],
+    Traveler: [
+      `Over a shared bowl, Yash tells you the story of the sea he once saw. "I think of a home with you — somewhere that smells of spice and old paper." The vision is fragile and beautiful.`,
+      `Yash traces the map of the three cities and says, "We'll stitch them together with our days." It's simple and makes you ache.`
+    ],
+    Scholar: [
+      `Yash finds an old marginal note in a book and reads it aloud to you in a voice that makes the letters new. "I love you the way I love discovery," he says, and it feels like the warmest equation.`,
+      `He offers to copy a ledger by lamplight if you will sit with him and read aloud — intimacy is the slow rhythm of pages turned together.`
+    ]
+  };
+
+  // procedural text fragments for backstories
+  const BACKSTORY_FRAGMENTS = [
+    "grew up by the river where the market begins",
+    "lost a sibling to a fever and keeps that loss private",
+    "was apprenticed to a guild in their youth",
+    "once loved someone who left for distant wars",
+    "keeps a small stack of letters tied with faded thread",
+    "learned bookkeeping from a stern uncle",
+    "has a soft laugh that betrays a hard life",
+    "makes a point of returning favors — honor matters",
+    "knows the routes many travelers use and has secrets",
+    "writes lists in the margins of every ledger"
+  ];
+
+  // seed RNG
+  function makeRng(seed){
+    let s = seed % 2147483647; if(s<=0) s += 2147483646;
+    return function(){
+      s = (s * 16807) % 2147483647;
+      return (s - 1) / 2147483646;
+    };
+  }
+
+  // create procedural NPCs for a run
+  function generateCast(seed){
+    const rng = makeRng(seed);
+    const cast = DEFAULT_NPCS.map(n=>{
+      const city = n.home === 'Variable' ? 'Mumbai' : n.home;
+      // role selection: variable choose from Variable roles randomly if variable, else city roles
+      const pool = n.home === 'Variable' ? ROLES.Variable : ROLES[n.home];
+      const role = pool[Math.floor(rng()*pool.length)];
+      // choose 2-3 traits
+      const traits = [];
+      const traitCount = 2 + Math.floor(rng()*2); // 2 or 3
+      const tpool = TRAITS.slice();
+      for(let i=0;i<traitCount;i++){
+        const idx = Math.floor(rng()*tpool.length);
+        traits.push(tpool.splice(idx,1)[0]);
+      }
+      // backstory
+      const back = BACKSTORY_FRAGMENTS[Math.floor(rng()*BACKSTORY_FRAGMENTS.length)];
+      // personality summary and modifier values
+      const disposition = {
+        warmth: traits.includes('Loyal') || traits.includes('Generous') ? 1 : (traits.includes('Ruthless') ? -1 : 0),
+        cunning: traits.includes('Cunning') || traits.includes('Ambitious') ? 1 : 0,
+        openness: traits.includes('Secretive') ? -1 : 1
+      };
+      return {...n, city, role, traits, backstory: `${role} who ${back}`, disposition};
+    });
+    // make Yash variable: possibly change home to random city to allow travel
+    const yash = cast.find(c=>c.name==='Yash');
+    if(Math.floor(rng()*2)===1) yash.city = ['Mumbai','Jaipur','Meerut'][Math.floor(rng()*3)];
+    return cast;
+  }
+
+  // initial state
+  function newState(seed){
+    seed = seed || Date.now();
+    const rng = makeRng(seed);
+    const cast = generateCast(seed);
+    // Yash initial love baseline varies by his traits
+    const yash = cast.find(c=>c.name==='Yash');
+    const baseYashRel = yash.traits.includes('Romantic') ? 3 : 1;
+    return {
+      seed,
+      cast,
+      player: {name:'Girisha', title:'Healer & Listener'},
+      city: 'Mumbai',
+      step:0,
+      money: 80 + Math.floor(rng()*60), // some variation
+      reputation: 0,
+      love: baseYashRel,
+      stats: {Psychology:7, Law:5, Merit:5, Democracy:4, Heart:8, Trust:6, Family:6},
+      relations: Object.fromEntries(cast.map(c=>[c.name, c.name==='Yash'?baseYashRel:0])),
+      inventory: [],
+      achievements: {},
+      flags: {}
+    };
+  }
+
+  // app state & rng
+  let state = loadIfAny() || newState();
+  let rng = makeRng(state.seed);
+
+  // helper utilities
+  function r(){ return rng(); }
+  function rint(a,b){ return Math.floor(r()*(b-a+1))+a; }
+  function clamp(v,a,b){ return Math.max(a,Math.min(b,v)); }
+
+  // DOM helpers
+  function log(html){
+    const d = document.createElement('div');
+    d.className = 'fade-in';
+    d.innerHTML = html;
+    D.log.appendChild(d);
+    D.log.scrollTop = D.log.scrollHeight;
+  }
+  function setChoices(arr){
+    D.choices.innerHTML = '';
+    arr.forEach(opt=>{
+      const btn = document.createElement('button');
+      btn.className = 'choice';
+      btn.innerHTML = `<strong>${opt.label}</strong>${opt.sub?`<small>${opt.sub}</small>`:''}`;
+      btn.onclick = ()=>{ opt.on(); autoSave(); };
+      D.choices.appendChild(btn);
+    });
+  }
+
+  function renderHUD(){
+    D.pName.textContent = state.player.name;
+    D.pTitle.textContent = state.player.title;
+    D.city.textContent = state.city;
+    D.seed.textContent = state.seed;
+    D.money.textContent = state.money;
+    D.rep.textContent = state.reputation;
+    D.love.textContent = state.love;
+    // stats
+    D.stats.innerHTML = '';
+    Object.entries(state.stats).forEach(([k,v])=>{
+      const el = document.createElement('div');
+      el.className = 'stat';
+      el.innerHTML = `<div class="small">${k}</div><div><strong>${v}</strong></div>`;
+      D.stats.appendChild(el);
+    });
+    // cast
+    D.npcList.innerHTML = '';
+    state.cast.forEach(c=>{
+      const el = document.createElement('div');
+      el.className = 'npc';
+      el.innerHTML = `<div><strong>${c.name}</strong> <small class="muted">(${c.city})</small><div class="small muted">${c.role} • ${c.traits.join(', ')} — ${c.backstory}</div></div><div class="small">${state.relations[c.name]>=0?`+${state.relations[c.name]}`:state.relations[c.name]}</div>`;
+      D.npcList.appendChild(el);
+    });
+    // inventory
+    D.inventory.innerHTML = '';
+    if(state.inventory.length===0) D.inventory.innerHTML = '<div class="small muted">No items</div>';
+    state.inventory.forEach(it=>{
+      const d = document.createElement('div'); d.className = 'item'; d.textContent = it; D.inventory.appendChild(d);
+    });
+    // achievements
+    D.achievements.innerHTML = '';
+    const keys = Object.keys(state.achievements);
+    if(keys.length===0) D.achievements.innerHTML = '<li class="muted small">— none yet</li>';
+    keys.forEach(k=>{ const li = document.createElement('li'); li.textContent = k; D.achievements.appendChild(li);});
+  }
+
+  // save/load/export/import
+  function autoSave(){ localStorage.setItem('girisha_save_v3', JSON.stringify(state)); }
+  function manualSave(){ autoSave(); log('<i>Saved locally.</i>'); }
+  function exportSave(){
+    const blob = new Blob([JSON.stringify(state)], {type:'application/json'});
+    const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='girisha_save.json'; a.click(); URL.revokeObjectURL(url);
+  }
+  function importSave(){
+    showModal('Import Save', `<textarea id="importArea" class="input" style="height:140px"></textarea>`, ()=>{
+      try{
+        const txt = document.getElementById('importArea').value;
+        const s = JSON.parse(txt);
+        state = s; rng = makeRng(state.seed);
+        closeModal(); log('<i>Imported save loaded.</i>'); renderHUD();
+      }catch(e){ alert('Invalid JSON'); }
+    }, 'Import');
+  }
+  function loadIfAny(){
+    try{ const s = localStorage.getItem('girisha_save_v3'); return s?JSON.parse(s):null; }catch(e){return null;}
+  }
+
+  // modal helpers
+  function showModal(title, html, onOk, okText='OK'){
+    D.modal.style.display = 'flex';
+    D.modal.innerHTML = `<div class="modal"><div class="box"><h3>${title}</h3><div style="margin:12px 0">${html}</div><div style="display:flex;justify-content:flex-end;gap:8px"><button id="mCancel">Cancel</button><button id="mOk">${okText}</button></div></div></div>`;
+    document.getElementById('mCancel').onclick = closeModal;
+    document.getElementById('mOk').onclick = onOk;
+  }
+  function closeModal(){ D.modal.style.display='none'; D.modal.innerHTML=''; }
+
+  // achievements helper
+  function grant(key){
+    if(state.achievements[key]) return;
+    state.achievements[key]=true; log(`<strong>Achievement:</strong> ${key}`);
+    renderHUD();
+  }
+
+  // event pools per city (procedural templates)
+  const EVENT_POOLS = {
+    Mumbai: [
+      (rngContext)=>({title:`Dockside Argument`, text:`A cargo dispute between merchants overheard — evidence may favor one side.`, type:'civic', npc: pickPresentNPC(rngContext,'Mumbai')}),
+      (rngContext)=>({title:`Tavern Song`, text:`A traveling bard tells a tale that mentions a ledger in Jaipur.`, type:'rumor'}),
+      (rngContext)=>({title:`Guild Offer`, text:`A guild clerk offers you a small commission if you can attest to someone's character.`, type:'quest', npc: pickPresentNPC(rngContext,'Mumbai')})
+    ],
+    Jaipur: [
+      (rngContext)=>({title:`Festival Conflict`, text:`An artisan quarrel breaks out over a design. The guild will judge.`, type:'civic', npc: pickPresentNPC(rngContext,'Jaipur')}),
+      (rngContext)=>({title:`Scribe's Letter`, text:`A note mentions family claims in Meerut, tied to an old ledger.`, type:'rumor'}),
+      (rngContext)=>({title:`Merchant's Bargain`, text:`A merchant offers to fund a small public stitch-of-works if you help mediate.`, type:'quest', npc: pickPresentNPC(rngContext,'Jaipur')})
+    ],
+    Meerut: [
+      (rngContext)=>({title:`River Tithe`, text:`A steward demands grain. Family honor and duty weigh heavy.`, type:'family'}),
+      (rngContext)=>({title:`Herbal Shortage`, text:`Simran's apothecary seeks rare herb — a moral choice to help distribute.`, type:'healing', npc: pickPresentNPC(rngContext,'Meerut')}),
+      (rngContext)=>({title:`Bandit Rumor`, text:`Carters whisper of bandits affecting trade to Mumbai.`, type:'rumor'})
+    ]
+  };
+
+  // helper to pick a present NPC for city; uses state.cast
+  function pickPresentNPC(rngCtx, city){
+    const present = state.cast.filter(c=> (city==='Mumbai' && c.city==='Mumbai') || c.city===city || c.home===city );
+    if(present.length===0) return state.cast[Math.floor(r()*state.cast.length)];
+    return present[Math.floor(r()*present.length)];
+  }
+
+  // reactors: handle event outcome choices
+  function handleEvent(event){
+    log(`<strong>${event.title}</strong> — ${event.text}`);
+    // present choices based on type
+    if(event.type==='civic'){
+      setChoices([
+        {label:`Use Law to present evidence`, sub:'(Law test)', on:()=>{ const succ = r() < state.stats.Law/12; if(succ){ log('Legal proof sways the guild; reputation rises.'); state.reputation += 3; grant('Courtwise'); } else { log('Arguments fall flat. Reputation dips.'); state.reputation -= 2; } tick(); }},
+        {label:`Use Psychology to calm tensions`, sub:'(Psychology test)', on:()=>{ const succ = r() < state.stats.Psychology/12; if(succ){ log('You calm the crowd; trust increases.'); state.stats.Psychology++; } else { log('The crowd misunderstands you.'); state.reputation--; } tick(); }},
+        {label:`Stay out of it`, on:()=>{ log('You keep distance; the world continues.'); tick(); }}
+      ]);
+    } else if(event.type==='quest'){
+      setChoices([
+        {label:`Accept the commission (costly time)`, on:()=>{ state.money += 30; state.reputation += 2; log('You complete the work — modest reward and respect.'); grant('Crafted Favor'); tick(); }},
+        {label:`Refuse politely`, on:()=>{ log('You decline; nothing gained.'); tick(); }}
+      ]);
+    } else if(event.type==='rumor'){
+      setChoices([
+        {label:`Follow the rumor`, sub:'(May unlock ledger quest)', on:()=>{ if(r() < 0.6){ log('The rumor proves useful — you find a clue.'); state.inventory.push('Ledger Clue'); } else log('The rumor leads to a dead end.'); tick(); }},
+        {label:`Ignore`, on:()=>{ log('You let the rumor pass.'); tick(); }}
+      ]);
+    } else if(event.type==='family'){
+      setChoices([
+        {label:`Pay to settle (₹40)`, on:()=>{ if(state.money>=40){ state.money -=40; state.stats.Family +=2; log('Family relief follows.'); grant('Family Duty'); } else { log('You cannot pay.'); } tick(); }},
+        {label:`Negotiate for leniency`, on:()=>{ const succ = r() < state.stats.Law/12; if(succ){ log('Your negotiation earns partial relief.'); state.reputation++; } else { log('Negotiation fails and tempers rise.'); state.reputation -=1; } tick(); }}
+      ]);
+    } else if(event.type==='healing'){
+      setChoices([
+        {label:`Help distribute remedies`, on:()=>{ if(state.stats.Merit > 5){ log('Distribution succeeds — gratitude and reputation rise.'); state.reputation += 3; grant('Healer of Many'); } else { log('Some logistics falter — you learn for next time.'); state.reputation -=1; } tick(); }},
+        {label:`Research better methods`, on:()=>{ state.stats.Psychology++; log('Your study yields better care later.'); tick(); }}
+      ]);
+    } else {
+      setChoices([{label:'Move On', on:()=>{ tick(); }}]);
+    }
+  }
+
+  // main tick: choose a next event or scene
+  function tick(){
+    state.step++;
+    // random small discovery
+    if(r() < 0.2){
+      const items = ['Faded Map','Old Coin','Mysterious Rune','Ledger Page','Traveler Note'];
+      const found = items[Math.floor(r()*items.length)];
+      state.inventory.push(found);
+      log(`You discovered: <strong>${found}</strong>.`);
+    }
+    // chance for Yash scene depending on love & step
+    if(r() < 0.2 + (state.love/20) && state.step > 2){
+      triggerYashScene();
+      return;
+    }
+    // choose a city and event
+    const city = state.city; // remain in current city for now
+    const pool = EVENT_POOLS[city] || EVENT_POOLS['Mumbai'];
+    const eventFactory = pool[Math.floor(r()*pool.length)];
+    const event = eventFactory();
+    handleEvent(event);
+    renderHUD();
+    // end-game check
+    if(state.step > 40) conclude();
+  }
+
+  // Yash romantic scene selection and effects
+  function triggerYashScene(){
+    const yash = state.cast.find(c=>c.name==='Yash');
+    // choose scene type based on yash.role
+    const roleKey = mapRoleToYashRole(yash.role);
+    const scenes = YASH_SCENES[roleKey] || YASH_SCENES['Traveler'];
+    const sceneText = scenes[Math.floor(r()*scenes.length)];
+    log(`<em>Special moment with Yash:</em> <strong>${sceneText}</strong>`);
+    // romance consequences: if Yash is Romantic trait boost love, else small chance
+    let delta = 1;
+    if(yash.traits.includes('Romantic')) delta = 2;
+    if(yash.traits.includes('Secretive')) delta = 0; // reserved
+    state.love = clamp(state.love + delta, -5, 12);
+    state.relations['Yash'] = state.relations['Yash'] + delta;
+    grant('Heartfelt Moment');
+    renderHUD();
+    // after scene continue
+    setTimeout(()=>{ tick(); }, 700);
+  }
+
+  function mapRoleToYashRole(role){
+    // map some role strings to keys in YASH_SCENES
+    const lower = role.toLowerCase();
+    if(lower.includes('poet') || lower.includes('scholar')) return 'Poet' in YASH_SCENES ? 'Poet' : 'Scholar';
+    if(lower.includes('soldier') || lower.includes('guard')) return 'Soldier';
+    if(lower.includes('trader') || lower.includes('merchant')) return 'Trader';
+    if(lower.includes('traveler')) return 'Traveler';
+    if(lower.includes('healer') || lower.includes('scribe')) return 'Scholar';
+    // default
+    return Object.keys(YASH_SCENES)[Math.floor(r()*Object.keys(YASH_SCENES).length)];
+  }
+
+  // user actions: Start New Game
+  function startNewGame(){
+    // new seed for fresh personalities each time
+    const seed = Date.now() + Math.floor(Math.random()*1000);
+    state = newState(seed);
+    rng = makeRng(state.seed);
+    log(`<strong>New tale seeded: ${state.seed}</strong>`);
+    log(`Cast has new personalities and roles. Yash role: ${state.cast.find(c=>c.name==='Yash').role}; traits: ${state.cast.find(c=>c.name==='Yash').traits.join(', ')}.`);
+    renderHUD();
+    // first introduction scene
+    introScene();
+    autoSave();
+  }
+
+  // initial intro scene (romantic emphasis)
+  function introScene(){
+    log(`<strong>Morning in ${state.city}</strong>. The river and the market sing with small things. A letter sits on your table, written in a hurried hand: "Find me at the quay — Y."`);
+    setChoices([
+      {label:'Go to the quay and meet Yash', sub:'(romance)', on:()=>{ log('You meet Yash; the smell of sea and lemons hangs between you.'); state.relations['Yash']++; triggerYashScene(); }},
+      {label:'Answer the letter at the scriptorium', on:()=>{ log('You read and reply carefully; a family duty tugs at you.'); state.stats.Law++; tick(); }},
+      {label:'Walk to the market to listen', on:()=>{ log('You wander and listen to gossip — the city teaches you new things.'); tick(); }}
+    ]);
+  }
+
+  // meet NPC explicit (deep conversation)
+  function meetNPC(name){
+    const npc = state.cast.find(c=>c.name===name);
+    if(!npc) { log('No such person here.'); tick(); return; }
+    log(`<strong>You meet ${npc.name}</strong>. ${npc.backstory}. They appear ${npc.traits.join(', ').toLowerCase()}.`);
+    // choices adapt to traits
+    const choices = [];
+    choices.push({label:'Listen and ask gentle questions (Psychology)', sub:'build trust', on:()=>{
+      const succ = r() < state.stats.Psychology/12 + (npc.disposition.warmth*0.08);
+      if(succ){ log(`${npc.name} opens up — you learn something intimate.`); state.relations[npc.name]+=2; state.stats.Psychology = clamp(state.stats.Psychology+1,1,12); }
+      else{ log(`${npc.name} is guarded today; the moment passes.`); state.relations[npc.name]--; }
+      tick();
+    }});
+    choices.push({label:'Talk about civic duty & law', sub:'public choices', on:()=>{
+      const succ = r() < state.stats.Law/12 + (npc.disposition.cunning*0.05);
+      if(succ){ log(`${npc.name} respects your argument; maybe a pledge is born.`); state.reputation++; }
+      else{ log('Your words are misunderstood; friction exists.'); state.reputation--; }
+      tick();
+    }});
+    if(npc.name === 'Yash'){
+      choices.push({label:'Share a small secret (Romance)', sub:'always romantic', on:()=>{
+        // pick one of the handwritten Yash scenes if applicable
+        triggerYashScene();
+      }});
+      choices.push({label:'Ask Yash to travel with you', on:()=>{
+        if(r() < 0.7 || state.relations['Yash'] > 3){ log('Yash agrees to travel — he will appear more across cities.'); state.flags.yashTravel = true; state.relations['Yash']++; state.love++; }
+        else { log('Yash hesitates. He is bound by duties.'); state.relations['Yash']--; }
+        tick();
+      }});
+    }
+    setChoices(choices);
+  }
+
+  // travel function
+  function travelTo(city){
+    state.city = city;
+    log(`You travel to ${city}. The road smells of dust and roasted grain.`);
+    // small chance Yash will accompany if flag set or high relation
+    if(state.flags.yashTravel || state.relations['Yash'] > 4){
+      const y = state.cast.find(c=>c.name==='Yash');
+      y.city = city; log('Yash accompanies you on this leg.'); state.relations['Yash']++;
+    }
+    renderHUD();
+    tick();
+  }
+
+  // conclusion & endings
+  function conclude(){
+    D.choices.innerHTML = '';
+    log('<hr><h3>Final Weave — Your Life This Run</h3>');
+    // evaluate metrics
+    const love = state.love;
+    const rep = state.reputation;
+    const money = state.money;
+    const heart = state.stats.Heart;
+    let ending = '';
+    if(love > 6 && rep > 3){
+      ending = `<strong>The Beloved Steward</strong>: You and Yash build a quiet life that changes others — love and civic work entwine.`;
+      grant('Beloved Steward');
+    } else if(rep < -4){
+      ending = `<strong>The Exiled Reformer</strong>: Battles cost dearly; you leave to rebuild elsewhere.`;
+      grant('Exiled Reformer');
+    } else if(money > 300){
+      ending = `<strong>The Patron</strong>: You channel resources to heal cities and fund schools.`;
+      grant('Patron of the Guilds');
+    } else if(heart < 4){
+      ending = `<strong>Solitary Scholar</strong>: The world taught you pain; you become a keeper of quiet knowledge.`;
+      grant('Wounded Sage');
+    } else {
+      ending = `<strong>The Traveling Healer</strong>: You move between cities mending what you can, with Yash by your side on better days.`;
+      grant('Travelling Heart');
+    }
+    log(ending);
+    setChoices([
+      {label:'Start a New Game (fresh personalities)', on:()=> startNewGame()},
+      {label:'Export this save', on:()=> exportSave()}
+    ]);
+  }
+
+  // UI: button wiring
+  D.start.onclick = ()=> startNewGame();
+  D.music.onclick = ()=>{ if(D.bg.paused){ D.bg.play().catch(()=> log('<small class="muted">Play blocked — interact with page to enable audio.</small>')); D.music.textContent='🔊 Music On'; } else { D.bg.pause(); D.music.textContent='🔈 Music Off'; } };
+  D.save.onclick = ()=> manualSave();
+  D.exp.onclick = ()=> exportSave();
+  D.imp.onclick = ()=> importSave();
+
+  // keyboard shortcuts (optional)
+  window.addEventListener('keydown',(e)=>{ if(e.key==='n'){ startNewGame(); } if(e.key==='s' && (e.ctrlKey||e.metaKey)){ e.preventDefault(); manualSave(); } });
+
+  // initial rendering
+  function renderHUD(){ // rebind frequently changed nodes
+    renderCommon();
+  }
+  function renderCommon(){
+    D.city.textContent = state.city;
+    D.seed.textContent = state.seed;
+    D.pName.textContent = state.player.name;
+    D.pTitle.textContent = state.player.title;
+    D.money.textContent = state.money;
+    D.rep.textContent = state.reputation;
+    D.love.textContent = state.love;
+    // stats
+    D.stats.innerHTML = '';
+    Object.entries(state.stats).forEach(([k,v])=>{
+      const el = document.createElement('div'); el.className='stat'; el.innerHTML=`<div class="small">${k}</div><div><strong>${v}</strong></div>`; D.stats.appendChild(el);
+    });
+    // cast list
+    D.npcList.innerHTML = '';
+    state.cast.forEach(c=>{
+      const d = document.createElement('div');
+      d.className='npc';
+      d.innerHTML = `<div><strong>${c.name}</strong> <small class="muted">(${c.city})</small><div class="small muted">${c.role} • ${c.traits.join(', ')} — ${c.backstory}</div></div><div class="small">${state.relations[c.name]>=0?`+${state.relations[c.name]}`:state.relations[c.name]}</div>`;
+      D.npcList.appendChild(d);
+    });
+    // inventory
+    D.inventory.innerHTML = '';
+    if(state.inventory.length===0) D.inventory.innerHTML = '<div class="small muted">No items</div>';
+    state.inventory.forEach(it=>{ const el = document.createElement('div'); el.className='item'; el.textContent = it; D.inventory.appendChild(el); });
+    // achievements
+    D.achievements.innerHTML = '';
+    const keys = Object.keys(state.achievements);
+    if(keys.length===0) D.achievements.innerHTML = '<li class="muted small">— none yet</li>';
+    keys.forEach(k=>{ const li = document.createElement('li'); li.textContent = k; D.achievements.appendChild(li); });
+
+  }
+
+  // helper to start new game seeded and show initial intro
+  function startNewGame(){
+    state = newState();
+    rng = makeRng(state.seed);
+    D.log.innerHTML = '';
+    log(`<strong>New Story Created — seed ${state.seed}</strong>`);
+    renderCommon();
+    // announce cast briefly
+    log(`<em>Cast:</em> ${state.cast.map(c=>`${c.name} (${c.role}, ${c.traits.slice(0,2).join(', ')})`).join(' • ')}`);
+    // set initial choices with strong Yash presence (romance)
+    setTimeout(()=> introScene(), 300);
+    autoSave();
+  }
+
+  // show modal for import
+  function importSave(){
+    showModal('Import Save', `<textarea id="importArea" class="input" style="height:140px"></textarea>`, ()=>{
+      try{
+        const txt = document.getElementById('importArea').value;
+        const s = JSON.parse(txt);
+        state = s; rng = makeRng(state.seed);
+        closeModal();
+        D.log.innerHTML=''; log('<i>Imported save loaded.</i>'); renderCommon();
+      }catch(e){ alert('Invalid JSON'); }
+    }, 'Import');
+  }
+
+  // simple helper to grant achievements
+  function grant(k){ if(state.achievements[k]) return; state.achievements[k]=true; log(`<strong>Achievement unlocked:</strong> ${k}`); renderCommon(); }
+
+  // on load: if no save, keep current state but render basic HUD and instruct user to Start
+  renderCommon();
+  log('<i>Click "Start / New Game" to begin.</i>');
+
+  // expose some functions for debugging in console (optional)
+  window._girisha = {state, startNewGame, triggerYashScene, travelTo, meetNPC};
+})();
+</script>
+</body>
+</html>
